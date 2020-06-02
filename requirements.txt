@@ -1,4 +1,4 @@
-REQUIREMENTS FOR GD
+REQUIREMENTS
 
 The code has been tested to run using:
 
