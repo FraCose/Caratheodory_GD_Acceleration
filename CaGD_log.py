@@ -1,4 +1,5 @@
 # THIS LIBRARY CONTATINS THE ALGORITHMS EXPLAINED IN THE WORK 
+# Cosentino, Oberhauser, Abate
 # "Acceleration of Descent-based Optimization Algorithms via Caratheodory's Theorem"
 
 ####################################################################################
