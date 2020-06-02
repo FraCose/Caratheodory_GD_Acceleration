@@ -1,4 +1,5 @@
 # THIS LIBRARY CONTATINS THE ALGORITHMS EXPLAINED IN THE WORK
+# Cosentino, Oberhauser, Abate
 # "A randomized algorithm to reduce the support of discrete measures " 
 
 ####################################################################################
