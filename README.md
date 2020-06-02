@@ -1,13 +1,17 @@
-README
-Acceleration of Descent-based Optimization Algorithms via Caratheodory’s Theorem
+---------------------------------------------------
+This Repository contains the Algorithms explained in<br />
+Cosentino, Oberhauser, Abate<br />
+Acceleration of Descent-based Optimization Algorithms via Caratheodory’s Theorem<br />
+---------------------------------------------------
 
--The ipython notebooks contain the experiments to be run
--The files *.py are the libraries with all the necessary functions, 
+The files are divided in the following way:<br />
+- The ipython notebooks contain the experiments to be run;<br />
+- The files *.py are the libraries with all the necessary functions.<br />
 
-Some general notes:
--The name of the ipynb files refers directly to the experiment in the pdf file.
--The last cells of the notebooks produce the pictures of the pdf.
--To reduce the running time the parameters can be easiliy changed, e.g. decreasing N, n or sample.
+Some general notes:<br />
+- The names of the ipynb files refer directly to the experiments in the cited work.<br />
+- The last cells of the notebooks produce the pictures of the pdf.<br />
+- To reduce the running time the parameters can be easiliy changed, e.g. decreasing N, n or sample.<br />
 
 ----------------------------------------------------
 SPECIAL NOTE TO RUN - Comparison_GD_vs_CaGD.ipynb 
