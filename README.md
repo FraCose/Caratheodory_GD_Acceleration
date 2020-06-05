@@ -39,7 +39,7 @@ wanted experiments. <br />
 ---------------------------------------------------
 To Run the Experiments - Datasets
 ---------------------------------------------------
-To run the experiments, the following dataset need to be donwloaded and saved in the Dataset folder:<br />
+To run the experiments, the following dataset need to be donwloaded and saved in the /Datasets folder:<br />
 - 3D_spatial_network.txt - <br />
 https://archive.ics.uci.edu/ml/machine-learning-databases/00246/3D_spatial_network.txt<br />
 - household_power_consumption.txt - <br />
