@@ -16,17 +16,17 @@ Some general notes:<br />
 ---------------------------------------------------
 Libraries - CaGD_log.py, CaGD_ls.py
 ---------------------------------------------------
-They contain the algorithms relative to the acceleration of the GD-based methods via the<br /> 
-Caratheodory's Theorem. The first is specialised in the logistic regression, while the second in<br /> 
+They contain the algorithms relative to the acceleration of the GD-based methods via the<br />
+Caratheodory's Theorem. The first is specialised in the logistic regression, while the second in<br />
 the least-squares case. The second contains also functions which replicate the behaviour of ADAM and SAG.<br />
 Only the functions in CaGD_ls.py are parallelized.<br />
 Requirement: recombination.py.
 
 ----------------------------------------------------
-Library - recombination.py 
+Library - recombination.py
 ----------------------------------------------------
-It contains the algorithms relative to the reduction of the measure presented in <br /> 
-COSENTINO, OBERHAUSER, ABATE - "A randomized algorithm to reduce the support of discrete measures",<br /> 
+It contains the algorithms relative to the reduction of the measure presented in <br />
+COSENTINO, OBERHAUSER, ABATE - "A randomized algorithm to reduce the support of discrete measures",<br />
 Available at https://github.com/FraCose/Recombination_Random_Algos
 
 ----------------------------------------------------
@@ -52,7 +52,7 @@ https://www.kaggle.com/c/nyc-taxi-trip-duration/data?select=train.zip<br />
 ---------------------------------------------------
 Funding
 ---------------------------------------------------
-The authors want to thank The Alan Turing Institute and the University of Oxford<br /> 
+The authors want to thank The Alan Turing Institute and the University of Oxford<br />
 for the financial support given. FC is supported by The Alan Turing Institute, TU/C/000021,<br />
 under the EPSRC Grant No. EP/N510129/1. HO is supported by the EPSRC grant Datasig<br />
 [EP/S026347/1], The Alan Turing Institute, and the Oxford-Man Institute.
