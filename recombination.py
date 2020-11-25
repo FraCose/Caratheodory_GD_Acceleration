@@ -1,6 +1,7 @@
 # THIS REPOSITORY CONTATINS THE ALGORITHMS EXPLAINED IN THE WORK
-# Cosentino, Oberhauser, Abate
-# "A randomized algorithm to reduce the support of discrete measures " 
+# Cosentino, Oberhauser, Abate - "A randomized algorithm to reduce the support of discrete measures " 
+# NeurIPS 2020
+# https://github.com/FraCose/Recombination_Random_Algos
 
 ####################################################################################
 # 
@@ -324,9 +325,10 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
                 idx = np.random.choice(N, n, replace = False)
                 cone_basis = X[idx,:]
                 ii += 1
-                if ii==10:
+                if ii==5:
                     if not HC_paradigm:
-                        print("ERROR: singular cone basis")
+                        if DEBUG == True:
+                            print("ERROR: singular cone basis")
                     ERR, w_star, x_star = 6, w_star*np.nan, x_star*np.nan
                     t = timeit.default_timer()-tic
                     return(w_star, idx_star, x_star, t, ERR, iterations, eliminated_points)
@@ -357,7 +359,8 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
 
                 test_inv = np.matmul(A,np.transpose(X[idx,:]))
                 if not np.allclose(test_inv, np.eye(n)):
-                    print("ERROR: numerical instability")
+                    if DEBUG == True:
+                        print("WARNING: numerical instability")
                     ERR, w_star, x_star = 1, w_star*np.nan, x_star*np.nan
                     idx_star = idx_star*np.nan
                     t = timeit.default_timer()-tic
@@ -653,7 +656,7 @@ def recomb_combined(X, max_iter=0, mu=0, fact=0, DEBUG=False):
     N, n = X.shape
     
     if max_iter == 0:
-        max_iter = n**4
+        max_iter = 2*n #n**4
 
     if fact == 0:
         fact = 50
@@ -689,7 +692,8 @@ def recomb_combined(X, max_iter=0, mu=0, fact=0, DEBUG=False):
                                                                             [], [], DEBUG)
                 if ERR != 0:
                     #####################################################################
-                    print("Using determiinistic Algorithm")
+                    if DEBUG == True:
+                        print("Using determiinistic Algorithm")
                     w_star, idx_star, x_star, _, ERR, _, _  = Tchernychova_Lyons(X[idx_story],mu[idx_story])
                     w_star = w_star/np.sum(mu[idx_story])
                     #####################################################################
@@ -718,7 +722,8 @@ def recomb_combined(X, max_iter=0, mu=0, fact=0, DEBUG=False):
         
         if ERR != 0:
             #####################################################################
-            print("Using determiinistic Algorithm")
+            if DEBUG == True:
+                print("Using determiinistic Algorithm")
             w_star, idx_star, _, _, ERR, _, _  = Tchernychova_Lyons(X_tmp,np.copy(tot_weights))
             w_star = w_star/np.sum(tot_weights)
             #####################################################################
@@ -761,7 +766,8 @@ def recomb_combined(X, max_iter=0, mu=0, fact=0, DEBUG=False):
                                                                     [], [], DEBUG)
             if ERR != 0:
                 #####################################################################
-                print("Using determiinistic Algorithm")
+                if DEBUG == True:
+                    print("Using determiinistic Algorithm")
                 w_star, idx_star, x_star, _, ERR, _, _  = Tchernychova_Lyons(X[idx_story],np.copy(mu[idx_story]))
                 w_star = w_star/np.sum(mu[idx_story])
                 #####################################################################

@@ -1,25 +1,30 @@
 # THIS LIBRARY CONTATINS THE ALGORITHMS EXPLAINED IN THE WORK
-# Cosentino, Oberhauser, Abate
 # "Acceleration of Descent-based Optimization Algorithms via Caratheodory's Theorem"
 
 ####################################################################################
 # 
 # This library is focused only on the development of the Caratheodory accelerated 
-# algorithms in the case of least-square with Lasso regularization.
+# algorithms in the case of least-square with and without Lasso regularization.
 # 
 # In general X represents the data/features, Y the labels and theta_0 the initial 
 # parameters. It returns theta (the desired argmin) and other variables to reconstruct
 # the history of the algorithm.
 # 
-# We can split the functions into two groups:
+# We can split the functions into three groups:
 #   - ADAM, SAG
-#   - CaBCD accelerated functions. The structure of the accelerated functions 
-#     is this:
+#   - BCD algorithm with the Caratheodory Sampling Procedure(CSP).
+#     The structure of the accelerated functions is this:
 #     a) the *_CA_* functions is the outer while of the algorithms described in 
 #     the cited work
 #     b) the *_mod_* functions represent the inner while, i.e. where we use the 
 #     the reduced measure
 #     c) directions_CA_steps_* functions are necessary for the parallelziation  
+#     of the code
+#   - BCD w/out the Caratheodory Sampling Procedure.
+#     The structure of the accelerated functions is this:
+#     a) mom_BCD_GS_ls, mom_BCD_random_ls, BCD_GS_ls are the outer while of 
+#     the algorithms described in the cited work w/out the CSP
+#     b) parallel_BCD_mom, parallel_BCD are necessary for the parallelziation  
 #     of the code
 #
 ####################################################################################
@@ -187,6 +192,420 @@ def SAG_ls(X,Y,theta_0,lambda_LASSO=0.,batch_size=256,
             " | time = ",timeit.default_timer()-tic)
 
     return (loss_story,iteration_story,theta,time_story)
+
+###############################################
+# Momentum_BCD w/out CaratheodorySP
+# GS and Random
+###############################################
+
+def mom_BCD_GS_ls(X,Y,theta_0,lambda_LASSO=0.,
+            lr=1e-3,loss_accepted=1e-8,max_iter=1e2,
+            size_block=2,percentage_gr = 0.75):
+
+    # it runs the BCD with momentum ,
+    # using mom_CA_BCD_mod and the GS rule for the selection of the blocks
+
+    num_cpus = psutil.cpu_count(logical=False)
+    tic = timeit.default_timer()
+    N = np.shape(X)[0]
+    iteration = 0.
+    loss = loss_accepted+1.
+
+    assert np.size(theta_0)>=size_block, "less parameters than size_block, decrease the size block"
+    
+    # MOMENTUM param
+    beta = 0.9
+    v = np.zeros(np.size(theta_0))
+
+    theta = np.array(theta_0)
+
+    loss_story = []
+    time_story = []
+    iteration_story = []
+
+    gr1d = np.empty(np.size(theta_0))
+    max_number_blocks = np.infty #8*num_cpus
+    to_extract = min(max_number_blocks*size_block,len(theta_0)*percentage_gr)
+    to_extract -= to_extract % size_block
+    to_extract = int(to_extract)
+
+    while (loss > loss_accepted and iteration < max_iter):
+        
+        # for i in range(1):
+
+        error_persample = np.dot(X,theta)-Y
+        error_persample = error_persample[np.newaxis].T
+
+        if iteration == 0:
+            loss = np.dot(error_persample.T,error_persample)[0,0]/N
+            loss += lambda_LASSO * np.abs(theta).sum()
+            loss_story.append(loss)
+            toc = timeit.default_timer()-tic
+            time_story.append(toc)
+            iteration_story.append(iteration)
+            print("iteration = ", int(iteration),
+                    " | loss = ", loss,
+                    " | time = ", toc)
+
+        gr_persample = 2*np.multiply(X,error_persample)
+        gr_persample += lambda_LASSO * np.sign(theta)
+        gr1d = np.mean(gr_persample,0)
+        
+        v = beta*v - lr*gr1d
+        # if i == 0:
+        theta += v
+        iteration += 1
+
+        loss = np.dot(error_persample.T,error_persample)[0,0]/N
+        loss += lambda_LASSO * np.abs(theta).sum()
+        loss_story.append(loss)
+        toc = timeit.default_timer()-tic
+        time_story.append(toc)
+        iteration_story.append(iteration)
+        print("iteration = ", int(iteration),
+                " | loss = ", loss,
+                " | time = ", toc)
+
+        blocks = building_blocks_cumsum(gr1d,size_block,percentage_gr,max_number_blocks,
+                                "sorted") # sorted, random or balanced
+        n_blocks = len(blocks)
+
+        if loss > loss_accepted:
+
+            # start parallel part
+            manager = mp.Manager()
+            results = manager.dict()
+            processes = []
+
+            for i in range(n_blocks):
+                p = mp.Process(target = parallel_BCD_mom,
+                               args = (results,i,X,Y,lambda_LASSO,
+                                    blocks[i], # direction_persample[:,blocks[i]],
+                                    theta, # theta_tm1,
+                                    # gr1d[blocks[i]], # gr1d_tm1[blocks[i]],
+                                    # max_iter,
+                                    v,
+                                    iteration,lr,loss_accepted))
+                processes.append(p)
+                p.start()
+
+            i = 0
+            for process in processes:
+                process.join()
+                i += 1
+            
+            # collecting results from the parallel execution
+            for i in range(n_blocks):
+                # if results[i][3] != 0:
+                #     continue
+                # if results[i][0] == 1:
+                #     continue
+                theta[blocks[i]] = results[i][0][blocks[i]]
+                v[blocks[i]] = results[i][1][blocks[i]]
+            
+            iteration += n_blocks #*(len(blocks[i])+1)/N
+
+    error_persample = np.dot(X,theta)-Y
+    error_persample = error_persample[np.newaxis].T
+    loss = np.dot(error_persample.T,error_persample)[0,0]/N
+    loss += lambda_LASSO * np.abs(theta).sum()
+    loss_story.append(loss)
+    toc = timeit.default_timer()-tic
+    time_story.append(toc)
+    iteration_story.append(iteration)
+    print("iteration = ", int(iteration),
+            " | loss = ", loss,
+            " | time = ", toc)
+            
+    toc = timeit.default_timer()-tic
+    return loss_story,iteration_story,theta,time_story
+
+def mom_BCD_random_ls(X,Y,theta_0,lambda_LASSO=0.,
+            lr=1e-3,loss_accepted=1e-8,max_iter=1e2,
+            size_block=2,percentage_gr = 0.75):
+
+    # it runs the BCD with momentum ,
+    # using parallel_BCD_mom and the random rule for the selection of the blocks
+
+    num_cpus = psutil.cpu_count(logical=False)
+    tic = timeit.default_timer()
+    N = np.shape(X)[0]
+    iteration = 0.
+    loss = loss_accepted+1.
+
+    assert np.size(theta_0)>=size_block, "less parameters than size_block, decrease the size block"
+    
+    # MOMENTUM param
+    beta = 0.9
+    v = np.zeros(np.size(theta_0))
+
+    theta = np.array(theta_0)
+
+    loss_story = []
+    time_story = []
+    iteration_story = []
+
+    gr1d = np.empty(np.size(theta_0))
+    max_number_blocks = np.infty #8*num_cpus
+    to_extract = min(max_number_blocks*size_block,len(theta_0)*percentage_gr)
+    to_extract -= to_extract % size_block
+    to_extract = int(to_extract)
+
+    while (loss > loss_accepted and iteration < max_iter):
+        
+        # for i in range(1):
+
+        error_persample = np.dot(X,theta)-Y
+        error_persample = error_persample[np.newaxis].T
+
+        if iteration == 0:
+            loss = np.dot(error_persample.T,error_persample)[0,0]/N
+            loss += lambda_LASSO * np.abs(theta).sum()
+            loss_story.append(loss)
+            toc = timeit.default_timer()-tic
+            time_story.append(toc)
+            iteration_story.append(iteration)
+            print("iteration = ", int(iteration),
+                    " | loss = ", loss,
+                    " | time = ", toc)
+
+        # gr_persample = 2*np.multiply(X,error_persample)
+        # gr_persample += lambda_LASSO * np.sign(theta)
+        # gr1d = np.mean(gr_persample,0)
+        
+        # v = beta*v - lr*gr1d
+        # # if i == 0:
+        # theta += v
+        # iteration += 1
+
+        loss = np.dot(error_persample.T,error_persample)[0,0]/N
+        loss += lambda_LASSO * np.abs(theta).sum()
+        loss_story.append(loss)
+        toc = timeit.default_timer()-tic
+        time_story.append(toc)
+        iteration_story.append(iteration)
+        print("iteration = ", int(iteration),
+                " | loss = ", loss,
+                " | time = ", toc)
+
+        blocks = np.random.choice(len(theta),to_extract,replace = False)
+        n_blocks = len(blocks)
+
+        if loss > loss_accepted:
+
+            # start parallel part
+            manager = mp.Manager()
+            results = manager.dict()
+            processes = []
+
+            for i in range(n_blocks):
+                p = mp.Process(target = parallel_BCD_mom,
+                               args = (results,i,X,Y,lambda_LASSO,
+                                    blocks[i], # direction_persample[:,blocks[i]],
+                                    theta, # theta_tm1,
+                                    # gr1d[blocks[i]], # gr1d_tm1[blocks[i]],
+                                    # max_iter,
+                                    v,
+                                    iteration,lr,loss_accepted))
+                processes.append(p)
+                p.start()
+
+            i = 0
+            for process in processes:
+                process.join()
+                i += 1
+            
+            # collecting results from the parallel execution
+            for i in range(n_blocks):
+                # if results[i][3] != 0:
+                #     continue
+                # if results[i][0] == 1:
+                #     continue
+                theta[blocks[i]] = results[i][0][blocks[i]]
+                v[blocks[i]] = results[i][1][blocks[i]]
+            
+            iteration += n_blocks #*(len(blocks[i])+1)/N
+
+    error_persample = np.dot(X,theta)-Y
+    error_persample = error_persample[np.newaxis].T
+    loss = np.dot(error_persample.T,error_persample)[0,0]/N
+    loss += lambda_LASSO * np.abs(theta).sum()
+    loss_story.append(loss)
+    toc = timeit.default_timer()-tic
+    time_story.append(toc)
+    iteration_story.append(iteration)
+    print("iteration = ", int(iteration),
+            " | loss = ", loss,
+            " | time = ", toc)
+            
+    toc = timeit.default_timer()-tic
+    return loss_story,iteration_story,theta,time_story
+
+def parallel_BCD_mom(results,proc_numb,X,Y,lambda_LASSO,
+                    block, # direction_persample[:,blocks[i]],
+                    theta, # theta_tm1,
+                    # gr1d[blocks[i]], # gr1d_tm1[blocks[i]],
+                    # max_iter,
+                    v,
+                    iteration,lr,loss_accepted):
+    beta = 0.9
+    error_persample = np.dot(X,theta)-Y
+    error_persample = error_persample[np.newaxis].T
+    gr_persample = 2*np.multiply(X,error_persample)
+    gr_persample += lambda_LASSO * np.sign(theta)
+    gr1d = np.mean(gr_persample,0)
+    v = beta*v - lr*gr1d
+    # if i == 0:
+    theta += v
+    print("PID parallel: ", os.getpid(), " | process number ", proc_numb) #," | iterations CA = ", iteration_CA)
+    results[proc_numb] = [theta,v]
+    return 
+
+###############################################
+# BCD w/out momentum GS w/out CaratheodorySP
+###############################################
+
+def BCD_GS_ls(X,Y,theta_0,lambda_LASSO=0.,
+            lr=1e-3,loss_accepted=1e-8,max_iter=1e2,
+            size_block=2,percentage_gr = 0.75):
+
+    # it runs the BCD with momentum ,
+    # using mom_CA_BCD_mod and the GS rule for the selection of the blocks
+
+    num_cpus = psutil.cpu_count(logical=False)
+    tic = timeit.default_timer()
+    N = np.shape(X)[0]
+    iteration = 0.
+    loss = loss_accepted+1.
+
+    assert np.size(theta_0)>=size_block, "less parameters than size_block, decrease the size block"
+    
+    # MOMENTUM param
+    # beta = 0.9
+    # v = np.zeros(np.size(theta_0))
+
+    theta = np.array(theta_0)
+
+    loss_story = []
+    time_story = []
+    iteration_story = []
+
+    gr1d = np.empty(np.size(theta_0))
+    max_number_blocks = np.infty #8*num_cpus
+    to_extract = min(max_number_blocks*size_block,len(theta_0)*percentage_gr)
+    to_extract -= to_extract % size_block
+    to_extract = int(to_extract)
+
+    while (loss > loss_accepted and iteration < max_iter):
+        
+        # for i in range(1):
+
+        error_persample = np.dot(X,theta)-Y
+        error_persample = error_persample[np.newaxis].T
+
+        if iteration == 0:
+            loss = np.dot(error_persample.T,error_persample)[0,0]/N
+            loss += lambda_LASSO * np.abs(theta).sum()
+            loss_story.append(loss)
+            toc = timeit.default_timer()-tic
+            time_story.append(toc)
+            iteration_story.append(iteration)
+            print("iteration = ", int(iteration),
+                    " | loss = ", loss,
+                    " | time = ", toc)
+
+        gr_persample = 2*np.multiply(X,error_persample)
+        gr_persample += lambda_LASSO * np.sign(theta)
+        gr1d = np.mean(gr_persample,0)
+        
+        # v = beta*v - lr*gr1d
+        # if i == 0:
+        theta -= lr*gr1d
+        iteration += 1
+
+        loss = np.dot(error_persample.T,error_persample)[0,0]/N
+        loss += lambda_LASSO * np.abs(theta).sum()
+        loss_story.append(loss)
+        toc = timeit.default_timer()-tic
+        time_story.append(toc)
+        iteration_story.append(iteration)
+        print("iteration = ", int(iteration),
+                " | loss = ", loss,
+                " | time = ", toc)
+
+        blocks = building_blocks_cumsum(gr1d,size_block,percentage_gr,max_number_blocks,
+                                "sorted") # sorted, random or balanced
+        n_blocks = len(blocks)
+
+        if loss > loss_accepted:
+
+            # start parallel part
+            manager = mp.Manager()
+            results = manager.dict()
+            processes = []
+
+            for i in range(n_blocks):
+                p = mp.Process(target = parallel_BCD,
+                               args = (results,i,X,Y,lambda_LASSO,
+                                    blocks[i], # direction_persample[:,blocks[i]],
+                                    theta, # theta_tm1,
+                                    # gr1d[blocks[i]], # gr1d_tm1[blocks[i]],
+                                    # max_iter,
+                                    # v,
+                                    iteration,lr,loss_accepted))
+                processes.append(p)
+                p.start()
+
+            i = 0
+            for process in processes:
+                process.join()
+                i += 1
+            
+            # collecting results from the parallel execution
+            for i in range(n_blocks):
+                # if results[i][3] != 0:
+                #     continue
+                # if results[i][0] == 1:
+                #     continue
+                theta[blocks[i]] = results[i][0][blocks[i]]
+                # v[blocks[i]] = results[i][1][blocks[i]]
+            
+            iteration += n_blocks #*(len(blocks[i])+1)/N
+
+    error_persample = np.dot(X,theta)-Y
+    error_persample = error_persample[np.newaxis].T
+    loss = np.dot(error_persample.T,error_persample)[0,0]/N
+    loss += lambda_LASSO * np.abs(theta).sum()
+    loss_story.append(loss)
+    toc = timeit.default_timer()-tic
+    time_story.append(toc)
+    iteration_story.append(iteration)
+    print("iteration = ", int(iteration),
+            " | loss = ", loss,
+            " | time = ", toc)
+            
+    toc = timeit.default_timer()-tic
+    return loss_story,iteration_story,theta,time_story
+
+def parallel_BCD(results,proc_numb,X,Y,lambda_LASSO,
+                    block, # direction_persample[:,blocks[i]],
+                    theta, # theta_tm1,
+                    # gr1d[blocks[i]], # gr1d_tm1[blocks[i]],
+                    # max_iter,
+                    # v,
+                    iteration,lr,loss_accepted):
+    # beta = 0.9
+    error_persample = np.dot(X,theta)-Y
+    error_persample = error_persample[np.newaxis].T
+    gr_persample = 2*np.multiply(X,error_persample)
+    gr_persample += lambda_LASSO * np.sign(theta)
+    gr1d = np.mean(gr_persample,0)
+    # v = beta*v - lr*gr1d
+    # if i == 0:
+    theta -= lr*gr1d
+    print("PID parallel: ", os.getpid(), " | process number ", proc_numb) #," | iterations CA = ", iteration_CA)
+    results[proc_numb] = [theta]
+    return 
 
 ###############################################
 # Momentum_CA_BCD parallel GS
@@ -394,7 +813,7 @@ def directions_CA_steps_mom(results,proc_numb,
     # CHECK FINISHED
     
     recomb_data = np.delete(recomb_data, check, 1)
-    w_star, idx_star, _, _, ERR_recomb = rb.recomb_log(np.copy(recomb_data),100)[0:5]
+    w_star, idx_star, _, _, ERR_recomb = rb.recomb_combined(np.copy(recomb_data))[0:5]
     
     if ERR_recomb == 2:
         print("######################### ERR_recomb, max iter")
@@ -761,7 +1180,7 @@ def directions_CA_steps_standard(results,proc_numb,
     # CHECK FINISHED
     
     recomb_data = np.delete(recomb_data, check, 1)
-    w_star, idx_star, _, _, ERR_recomb = rb.recomb_log(np.copy(recomb_data),100)[0:5]
+    w_star, idx_star, _, _, ERR_recomb = rb.recomb_combined(np.copy(recomb_data))[0:5]
     
     if ERR_recomb == 2:
         print("######################### ERR_recomb, max iter")
