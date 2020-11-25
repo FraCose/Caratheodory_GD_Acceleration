@@ -26,18 +26,18 @@ Requirement: recombination.py.
 Libraries - train.py, Create_dataset_A.m, src folder
 ---------------------------------------------------------
 These are the files necessary for the experiments done using the rules of [Nutini et al.].<br />
-    - Create_dataset_A.m creates the Dataset A of [Nutini et al.] using Matlab. <br />
-    - Train.py contains the functions which are the skeleton of the optimization procedure. <br />
-      It corresponds to trainval.py in [Nutini URL]. We have :<br />
-        •	removed dependencies not relevant for our experiments;<br />
-        •	added the skeleton for the optimization procedure using the Caratheodory Sampling Procedure.<br />
-    - src/losses.py follows the same logic as losses.py from [Nutini URL]. <br />
-      We have kept only the least-squares object and we have modified it because the Cartheodory <br />
-      Sampling procedure requires the gradient for any sample.<br />
-    - src/update_rules/update_rules.py the same structure of the same file from [Nutini URL]. <br />
-      The function update_Caratheodory(…) is the same as update(…) in the cited repository. We added the functions:<br />
-      update_Caratheodory, recomb_step, Caratheodory_Acceleration.<br />
-    - The rest of the files is the same as [Nutini URL].<br />
+- Create_dataset_A.m creates the Dataset A of [Nutini et al.] using Matlab. <br />
+- Train.py contains the functions which are the skeleton of the optimization procedure. <br />
+  It corresponds to trainval.py in [Nutini URL]. We have :<br />
+  •	removed dependencies not relevant for our experiments;<br />
+  •	added the skeleton for the optimization procedure using the Caratheodory Sampling Procedure.<br />
+- src/losses.py follows the same logic as losses.py from [Nutini URL]. <br />
+  We have kept only the least-squares object and we have modified it because the Cartheodory <br />
+  Sampling procedure requires the gradient for any sample.<br />
+- src/update_rules/update_rules.py the same structure of the same file from [Nutini URL]. <br />
+  The function update_Caratheodory(…) is the same as update(…) in the cited repository. We added the functions:<br />
+  update_Caratheodory, recomb_step, Caratheodory_Acceleration.<br />
+- The rest of the files is the same as [Nutini URL].<br />
 
 [Nutini et al.] Julie Nutini, Issam Laradji, and Mark Schmidt - "Let’s make block coordinate<br />
 descent go fast: Faster greedy rules, message-passing, active-set complexity, and<br />
