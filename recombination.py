@@ -35,6 +35,8 @@
 import numpy as np
 import copy, timeit
 
+from numpy.core.records import get_remaining_size
+
 ######################################################################################
 # recomb_basic represents the not-optimized algorithm.
 ######################################################################################
@@ -146,7 +148,7 @@ def recomb_NOMor_NOreset(X, max_iter, idx=[], DEBUG=False):
             return(w_star, idx_star, x_star, t, ERR, iterations, eliminated_points)
         
         if iterations > max_iter:
-            print("ERROR NO convergence")
+            if DEBUG: print("ERROR NO convergence")
             ERR, w_star, x_star = 2, w_star*np.nan, x_star*np.nan
             t = timeit.default_timer()-tic
             return(w_star, idx_star, x_star, t, ERR, iterations, eliminated_points)
@@ -277,7 +279,8 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
         return recomb_1(X)
 
     if len(idx) != n:
-        idx = np.random.choice(N, n, replace = False)
+        idx = np.random.choice(N, min(N,n), replace = False)
+        
         # idx = choose_initial_points(X)
         # idx = choose_initial_points_tens_sq(X)
     
@@ -285,6 +288,7 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
     eliminated_points = np.array([], dtype=int)
     remaing_points = np.shape(X)[0]
 
+    idx_story = np.arange(N)
     w_star = np.zeros([1, n+1])
     x_star = np.zeros([1, n+1])
     idx_star = np.nan*np.ones([1, n+1])
@@ -292,29 +296,32 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
     while True:
         
         if remaing_points<=n+1:
-            idx_tmp = X[:,0] != np.nan
-            x_star = X[idx_tmp,:]
-            w_star = np.linalg.solve(np.append(np.transpose(x_star),np.ones([1,n+1]), axis=0),
-                                     np.append(np.zeros([1,n]),1))
+            # idx_tmp = np.logical_not(np.isnan(X[:,0]))
+            x_star = X[idx_story,:]
+            # w_star = np.linalg.solve(np.append(np.transpose(x_star),np.ones([1,remaing_points]), axis=0),
+            #                          np.append(np.zeros([1,remaing_points-1]),1))
+            w_star = np.linalg.lstsq(np.append(np.transpose(x_star),np.ones([1,remaing_points]), axis=0).T, 
+                            np.append(np.zeros([1,remaing_points-1]),1))[0]
             ERR = 0
 
             if any(w_star<0) or any(w_star>1) or np.round(np.sum(w_star),6)!=1.:
-                print("Warning weights found no contraint, data<=d+1")
+                if DEBUG==True:
+                    print("Warning weights found no contraint, data<=d+1")
                 ERR, w_star, x_star = 3, w_star*np.nan, x_star*np.nan
             
             t = timeit.default_timer()-tic
-            idx_star = np.arange(n)
+            idx_star = idx_story
             return w_star, idx_star, x_star, t, ERR, iterations, eliminated_points
 
         if iterations > max_iter:
             ERR, w_star, x_star = 2, w_star*np.nan, x_star*np.nan
             if not HC_paradigm:
-                print("ERROR: NO convergence")
+                if DEBUG: print("ERROR: NO convergence")
                 t = timeit.default_timer()-tic
                 return w_star, idx_star, x_star, t, ERR, iterations, eliminated_points
             
             t = timeit.default_timer()-tic
-            return w_star, idx_star, x_star, t, ERR, iterations, eliminated_points, X_sphere
+            return w_star, idx_star*np.nan, x_star, t, ERR, iterations, eliminated_points, X_sphere
         
         if iterations==1:
             cone_basis = X[idx,:]
@@ -340,7 +347,8 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
             # if not np.allclose(test_inv, np.eye(d)):
             #     print("test_inv", np.allclose(test_inv, np.eye(d)))
             
-            AX = np.matmul(A, np.transpose(X))   
+            AX = np.zeros((n,N))
+            AX[:,idx_story] = np.matmul(A, np.transpose(X[idx_story]))
 
         if iterations>1:
             idx_changed = (iterations-2) % n
@@ -365,8 +373,9 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
                     idx_star = idx_star*np.nan
                     t = timeit.default_timer()-tic
                     return w_star, idx_star, x_star, t, ERR, iterations, eliminated_points
-
-                AX = np.matmul(A, np.transpose(X))
+                
+                AX = np.zeros((n,N))
+                AX[:,idx_story] = np.matmul(A, np.transpose(X[idx_story]))
             else:
                 AX -= np.matmul(prod,AX[idx_changed,:][np.newaxis])/const
                 cone_basis = X[idx,:]
@@ -377,23 +386,25 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
             #     print("false")
         
         # tmp_1 = indices of the points inside (if any) the inverse cone defined via cone_basis
-        tmp_1 = np.transpose(AX<=0)
-        tmp_1 = np.arange(N)[np.all(tmp_1,1)]
+        tmp_1 = np.transpose(AX[:,idx_story]<=0)
+        tmp_1 = np.arange(remaing_points)[np.all(tmp_1,1)]
 
         if len(tmp_1)>0:
             
-            x_star = X[tmp_1[0],:]
+            x_star = X[idx_story[tmp_1[0]],:]
             # Compute weights
             w_star = solve_given_inverse(cone_basis,x_star,A)
             x_star = np.append(cone_basis, x_star[np.newaxis], axis=0)
-            idx_star = np.append(idx,tmp_1[0])
+            idx_star = np.append(idx,idx_story[tmp_1[0]])
 
             if any(w_star<0) or any(w_star>1) or np.round(sum(w_star),6)!=1.:
-                print("Warning weights found, no constraint")
+                if DEBUG == True:
+                    print("Warning weights found, no constraint")
                 ERR, w_star, x_star = 1, w_star*np.nan, x_star*np.nan
                 idx_star = idx_star*np.nan
             elif not np.allclose(np.sum(np.multiply(x_star,w_star[:,np.newaxis]),0),np.zeros(n)):
-                print("Warning, low precison in the solution")
+                if DEBUG == True:
+                    print("Warning, low precison in the solution")
                 ERR, w_star, x_star = 1, w_star*np.nan, x_star*np.nan
                 idx_star = idx_star*np.nan
 
@@ -402,16 +413,18 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
             return w_star, idx_star, x_star, t, ERR, iterations, eliminated_points
         
         # delete useless points
-        tmp_2 = np.transpose(AX>0)
-        tmp_2 = np.arange(N)[np.all(tmp_2,1)]
+        tmp_2 = np.transpose(AX[:,idx_story]>0)
+        tmp_2 = np.arange(remaing_points)[np.all(tmp_2,1)]
 
-        idx_in_tmp2 = np.in1d(idx,tmp_2)
+        idx_in_tmp2 = np.in1d(idx,idx_story[tmp_2])
         if any(idx_in_tmp2):
             # means numerical problem during the inversion (see matrix A)
             if DEBUG:
                 print("wrong elimination, numerical instability")
             A = np.linalg.inv(np.transpose(cone_basis))
-            AX = np.matmul(A, np.transpose(X))
+            # AX = np.matmul(A, np.transpose(X[idx_story]))
+            AX = np.zeros((n,N))
+            AX[:,idx_story] = np.matmul(A, np.transpose(X[idx_story]))
             tmp_2 = []
 
             # ERR, w_star, x_star = 6, w_star*np.nan, x_star*np.nan
@@ -421,29 +434,47 @@ def recomb_Mor_NOreset(X, max_iter, idx=[], X_sphere = [], DEBUG=False, HC_parad
             if DEBUG:
                 print("I am deleting ", len(tmp_2), "point/s")
             
-            # delete useless points
-            X[tmp_2,:] = np.nan
-            AX[:,tmp_2] = np.nan
-            if iterations>1:
-                X_sphere[tmp_2,:] = np.nan
             eliminated_points = np.append(eliminated_points,
-                                        tmp_2).reshape(-1)
+                                        idx_story[tmp_2]).reshape(-1)
+            # delete useless points
+            idx_story = np.delete(idx_story, tmp_2)
+            # AX = AX[:,idx_story]
+            # X[tmp_2,:] = np.nan
+            # AX[:,tmp_2] = np.nan
+            # if iterations>1:
+            #     X_sphere[tmp_2,:] = np.nan
+            
             remaing_points -= len(tmp_2)
 
+        if remaing_points <= n+1:
+            continue
         # compute norm
         # given the searching srategy of the algorithm we compute the projection of the
         # points on the sphere once for ever
+
         if iterations == 1 and X_sphere == []: 
             normX = np.sqrt(np.sum(np.multiply(X,X),1))
-            X_sphere = np.divide(X,normX[:,np.newaxis])
-
+            # X_sphere = np.zeros((N,n))
+            X_sphere = np.divide(X,normX[:,np.newaxis])       
+        # elif iterations == 1:
+        #     idx_tmp = np.arange(N)[np.all(X_sphere==0,1)]
+        #     idx_tmp = idx_tmp[np.isin(idx_tmp,idx_story)]
+        #     normX = np.sqrt(np.sum(np.multiply(X[idx_tmp],X[idx_tmp]),1))
+        #     X_sphere[idx_tmp] = np.divide(X[idx_tmp],normX[:,np.newaxis]) 
+        
         idx_tobechanged = (iterations-1) % n
-        idx_max = new_point_meanmax(X_sphere, idx, idx_tobechanged)
+        
+        idx_in_tmp3 = np.arange(remaing_points)[np.isin(idx_story,idx)]
+        idx_tobechanged_tmp = np.arange(len(idx))[np.argsort(idx)==idx_tobechanged][0]
+        
+        idx_max = new_point_meanmax(X_sphere[idx_story], idx_in_tmp3, idx_tobechanged_tmp)
+        idx_max = idx_story[idx_max]
 
         iterations += 1
         
         if iterations % 200 == 0 and (not HC_paradigm):
-            print("Recombination procedure iteration = ", iterations)
+            if DEBUG == True:
+                print("Recombination procedure iteration = ", iterations)
 
 def recomb_Mor_reset(X, max_iter, idx=[], reset_factor=0, X_sphere = [], DEBUG=False, HC_paradigm=False):
     # this functions add a reset strategy to recomb_Mor_NOreset
@@ -498,7 +529,7 @@ def recomb_Mor_reset(X, max_iter, idx=[], reset_factor=0, X_sphere = [], DEBUG=F
             x_star = np.empty(n+1)*np.nan
             idx_star = np.empty(n+1)*np.nan
             if not HC_paradigm:
-                print("ERROR: NO convergence")
+                if DEBUG: print("ERROR: NO convergence")
             ERR = 2
             t = timeit.default_timer()-tic
             return(w_star, idx_star, x_star, t, ERR, total_iteration, eliminated_points)
@@ -547,6 +578,7 @@ def recomb_log(X, max_iter=0, mu=0, fact=0,DEBUG=False):
         # remaining points at the next step are = to remaining_points/number_of_sets*(n+1)
 
         numb_points_next_step = int(remaining_points/fact)
+        
         if numb_points_next_step >= number_of_sets: 
             number_of_el = int(remaining_points/number_of_sets)
             idx_next_step = []
@@ -814,9 +846,29 @@ def Tchernychova_Lyons(X, mu=0,DEBUG=False):
 
     while True:
         
+        if remaining_points <= n+1:
+            idx_star = np.arange(len(mu))[mu>0]
+            w_star = mu[idx_star]
+            x_star = X[idx_star]
+            toc = timeit.default_timer()-tic
+            return w_star, idx_star, X[idx_star], toc, ERR, np.nan, np.nan
+        elif n+1 < remaining_points <= number_of_sets:
+            w_star, idx_star, x_star, _, ERR, _, _ = Tchernychova_Lyons_CAR(X[idx_story], np.copy(mu[idx_story]),DEBUG)
+            idx_story = idx_story[idx_star]
+            mu[:] = 0.
+            mu[idx_story] = w_star
+            idx_star = idx_story
+            x_star = X[idx_story]
+            w_star = mu[mu>0]
+            toc = timeit.default_timer()-tic
+            return w_star, idx_star, x_star, toc, ERR, np.nan, np.nan
+        
         # remaining points at the next step are = remaining_points/card*(n+1)
         
+        # number of elements per set
         number_of_el = int(remaining_points/number_of_sets)
+        # WHAT IF NUMBER OF EL == 0??????
+        # IT SHOULD NOT GET TO THIS POINT GIVEN THAT AT THE END THERE IS A IF
 
         X_tmp = np.empty((number_of_sets,n))
         # mu_tmp = np.empty(number_of_sets)
@@ -858,23 +910,6 @@ def Tchernychova_Lyons(X, mu=0,DEBUG=False):
         idx_story = np.copy(idx_tomaintain)
         remaining_points = len(idx_story)
         # remaining_points = np.sum(mu>0)
-
-        if remaining_points <= n+1:
-            idx_star = idx_story
-            w_star = mu[mu>0]
-            x_star = X[idx_star]
-            toc = timeit.default_timer()-tic
-            return w_star, idx_star, X[idx_star], toc, ERR, np.nan, np.nan
-        elif n+1 < remaining_points <= number_of_sets:
-            w_star, idx_star, x_star, _, ERR, _, _ = Tchernychova_Lyons_CAR(X[idx_story], np.copy(mu[idx_story]),DEBUG)
-            idx_story = idx_story[idx_star]
-            mu[:] = 0.
-            mu[idx_story] = w_star
-            idx_star = idx_story
-            x_star = X[idx_story]
-            w_star = mu[mu>0]
-            toc = timeit.default_timer()-tic
-            return w_star, idx_star, x_star, toc, ERR, np.nan, np.nan
 
 def Tchernychova_Lyons_CAR(X,mu,DEBUG=False):
     # this functions reduce X from N points to n+1
