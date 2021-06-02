@@ -53,7 +53,7 @@ COSENTINO, OBERHAUSER, ABATE - "A randomized algorithm to reduce the support of 
 NeurIPS 2020, Available at https://github.com/FraCose/Recombination_Random_Algos
 
 ----------------------------------------------------------
-Special Note to run the experiments
+Special notes to run the experiments
 ----------------------------------------------------------
 The notebooks "CaGD_paths.ipynb" and "Comparison_GD_vs_CaGD.ipynb" contain multiple experiments.<br />
 You have to comment/uncomment the respective parts of the code as indicated to reproduce the <br />
